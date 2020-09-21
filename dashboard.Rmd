@@ -1,0 +1,299 @@
+---
+title: "Stakeholder version of Advocator Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+  source_code: embed
+  vertical_layout: scroll
+  theme: yeti
+editor_options: 
+  chunk_output_type: console
+---
+  
+``` {js}
+
+$('.navbar-inverse').removeClass('navbar-inverse').addClass('navbar-default');
+
+```
+
+
+```{r include=FALSE}
+
+setwd(here::here())
+
+source("libraries.R")
+
+batchid_log <- readRDS("batchid_log.RDS")
+
+main_dat <- readRDS("main_dat.RDS")
+
+monthly_result <- readRDS("monthly_result.RDS")
+
+result_hear <- readRDS("result_hear.RDS")
+
+result_init <- readRDS("result_init.RDS")
+
+
+source("functions.R")
+
+```
+
+<style>
+  .colored {
+    background-color: #FAFAFA;
+  }
+</style>
+  
+  
+  
+  Monitor {data-icon="fa-tv"}
+=====================================
+  
+  
+  
+  <!-- ### Successful batch?  -->
+  
+  <!-- ```{r} -->
+  
+  <!-- success <- batchid_log$sucessful[batchid_log$predicted_date == max(batchid_log$predicted_date)] -->
+  
+  <!-- if(success == TRUE){ -->
+      <!--   c <- "#169e1b" -->
+        <!-- } else { -->
+            <!--   c <- "#ed2c13" -->
+              <!-- } -->
+  
+  <!-- valueBox(success, color = c) -->
+  
+  <!-- ``` -->
+  
+
+
+<!--   Column {data-width=100 } -->
+<!-- ----------------------------------------------------------------------- -->
+
+
+<!--   ###  -->
+
+<!--   ```{r} -->
+
+<!-- # batchid_log <- readRDS("batchid_log.RDS") -->
+
+<!-- pred_date <- max(batchid_log$predicted_date) -->
+
+<!-- valueBox(pred_date, subtitle = 'Most Recent Predicted Date',  color = "aqua") -->
+
+<!-- ``` -->
+
+
+Column {}
+-----------------------------------------------------------------------
+
+### Overall AUC
+
+```{r}
+avg_auc <- round(mean(monthly_result$auc), 4) * 100
+
+flexdashboard::valueBox(value= paste0(sprintf("%s", avg_auc), "%"), color='blue')
+```
+
+Column {}
+-----------------------------------------------------------------------
+  
+
+### Total Cases
+
+```{r}
+
+tot_id <- length(unique(main_dat$LegalCaseID))
+
+flexdashboard::valueBox(value = format(tot_id, big.mark="," , small.interval=3), color = "green")
+
+```
+
+Column {}
+-----------------------------------------------------------------------
+  
+### Total Non-Zero Cases
+  
+```{r}
+
+tot_nonzero <- main_dat %>% 
+  filter(net_init != 0 | net_hear != 0) %>% 
+  nrow
+
+flexdashboard::valueBox(value = format(tot_nonzero, big.mark="," , small.interval=3), color = 'red')
+
+```
+
+Column {}
+-----------------------------------------------------------------------
+
+### Total Revenue
+  
+```{r}
+
+tot_net <- round(sum(main_dat$net_init, na.rm = TRUE) + sum(main_dat$net_hear, na.rm = TRUE))  
+
+flexdashboard::valueBox(value = paste0("$", sprintf("%s", format(tot_net, big.mark="," , small.interval=3))),  color = 'maroon')
+
+```
+
+Column {data-width = 200}
+-----------------------------------------------------------------------
+ 
+### Total Attributable Revenue
+ 
+```{r}
+
+att <- round((avg_auc/100 - 0.50) * tot_net)
+
+flexdashboard::valueBox(value = paste0("$", sprintf("%s", format(att, big.mark="," , small.interval=3))), color = 'navy')
+
+```
+
+Column {}
+-----------------------------------------------------------------------
+
+### Value per Case
+
+```{r}
+
+avg_att <- round(att / tot_nonzero)
+
+flexdashboard::valueBox(value = paste0("$", sprintf("%s", format(avg_att, big.mark="," , small.interval=3))), color = 'teal')
+
+```
+
+Column {data-width = 200}
+-----------------------------------------------------------------------
+
+### Average Revenue with Zeros Removed
+
+```{r}
+
+main_dat2 <- main_dat %>% filter(net_init != 0 | net_hear != 0)
+
+avg_net_wo_zeros <- round(mean(c(main_dat2$net_init, main_dat2$net_hear), na.rm = TRUE))
+
+flexdashboard::valueBox(value = paste0("$", sprintf("%s", format(avg_net_wo_zeros, big.mark="," , small.interval=3))),  color = 'lime') 
+
+```
+
+Column {data-width = 0}
+-----------------------------------------------------------------------
+
+### Proportion of Zero Net
+  
+```{r}
+
+main_dat %<>% 
+  mutate(zero_init_net = case_when(
+    .$net_init == 0 | .$net_hear == 0 ~ 1,
+    TRUE ~ 0))
+
+prop_zeros <- round(sum(main_dat$zero_init_net)/nrow(main_dat), 4) * 100
+
+flexdashboard::valueBox(value = paste0(sprintf("%s", prop_zeros), "%"),color = 'orange')
+
+```
+
+Column {}
+-----------------------------------------------------------------------
+
+### Average Revenue
+  
+```{r}
+
+avg_net <- round(tot_net / tot_id)
+
+flexdashboard::valueBox(value = paste0("$", sprintf("%s", format(avg_net, big.mark="," , small.interval=3))), color = 'purple')
+
+```
+
+Delinquent Accounts {data-navmenu="Delinquent Accounts"}
+===================================================
+
+
+Column {}
+-----------------------------------------------------------------------
+  
+
+### Table 1 - Delinquent Accounts
+
+```{r}
+
+delinquent_account_100 <- result_init %>% select(LegalCaseID, result_init , date_init,    net_init) %>% 
+  filter (result_init == 'Awarded' & net_init == 0 ) %>% 
+  arrange(desc(date_init)) %>%
+  mutate(today_initial_date = Sys.Date() - date_init)  %>%  
+  head(100)
+
+delinquent_account_100 %>%
+  select(LegalCaseID, result_init, date_init, net_init, today_initial_date) %>% 
+  datatable(class = "cell-border", rownames = FALSE, 
+            colnames = c("LegalCaseID", "Initial_Result", "Initial_Decision_Date", "Net_Case", "Time_diff_casewon_notpaid"), 
+          caption = "Table showing Days Difference between Initial Case being won and not being paid")  # %>% 
+  # formatCurrency(2:4, digits = 3, currency = "")
+
+```
+
+Column {data-width=40}
+-----------------------------------------------------------------------
+
+
+
+Column {}
+-----------------------------------------------------------------------
+  
+
+### Plot 1 - Average time to payment by closure month
+
+```{r}
+
+delinquent_account <- result_init %>% select(LegalCaseID, result_init , date_init,  net_init) %>% 
+  filter (result_init == 'Awarded' & net_init == 0 ) %>% 
+  arrange(desc(date_init)) %>%
+  mutate(today_initial_date = Sys.Date() - date_init,
+         date_init1 =  zoo::as.yearmon(date_init))  
+
+
+avgtime_month <- delinquent_account %>% select(today_initial_date, date_init1 ) %>% 
+  group_by(date_init1) %>%
+  summarise (avg_time = round(mean(today_initial_date),2))  %>% distinct()
+
+#avgtime_month$date_init <- zoo::as.yearmon(avgtime_month$date_init)
+
+
+#avgtime_month$date_init %<>% group_by(date_init)
+
+#avgtime_month$date_init <- lubridate::as_date(avgtime_month$date_init)
+
+#avgtime_month$date_init <- zoo::as.yearmon(avgtime_month$date_init, "%m/%Y")
+
+x <- c("closure_month")
+y <- sprintf("{point.%s}", 
+             c("avg_time"))
+
+tltip <- tooltip_table(x,y)
+
+avgtime_month$date_init1 %<>% as.character()
+
+#avgtime_month$date_init %<>% group_by(date_init)
+
+#avgtime_month$date_init <- factor(avgtime_month$date_init)
+
+highchart()%>%
+  #group_by(date_init) %>%
+  hc_add_series(avgtime_month, hcaes(x = date_init1, y = avg_time), type = "line",    color = 'blue', name = "Avg time to payment by closure month") %>%
+  hc_yAxis(title = list(text = "Avg time to Close")) %>%
+  #hc_xAxis(type = 'monthyear', labels = list(format = '{value:%b %d}')) %>%
+  hc_xAxis(title = list(text = "Closure Month"), categories = (avgtime_month$date_init1)) %>%
+  #hc_xAxis(title = list(text = "Closure Month", )))%>%
+  hc_tooltip(useHTML = TRUE, pointFormat = tltip, split = FALSE)   #%>% 
+  #hc_add_theme(custom_theme)
+
+  
+```
+
+
+
