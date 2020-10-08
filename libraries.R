@@ -1,0 +1,16 @@
+library(flexdashboard)
+library(highcharter)
+library(viridis) 
+library(tidyverse)
+library(rjson)
+library(plotly)
+#library(quivR)
+library(magrittr)
+library(crosstalk)
+library(DT)
+library(lubridate)
+library(zoo)
+library(shiny)
+library(shinydashboard)
+
+
